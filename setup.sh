@@ -52,7 +52,7 @@ pushd ~/Downloads
 popd
 
 # QT5 (for Cangaroo CANbus tools)
-#apt-get -y install qt5-qmake qtbase5-dev libnl-3-dev libnl-route-3-dev
+#sudo apt-get -y install qt5-qmake qtbase5-dev libnl-3-dev libnl-route-3-dev
 
 # Python 3 (As required by Zephyr)
 # sudo apt-get -y install python3-dev python3-pip python3-setuptools python3-tk python3-wheel python3-venv xz-utils file 
