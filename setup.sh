@@ -102,4 +102,12 @@ npm install -g npm@latest
 #sudo chown -R wcl:wcl esp
 #sudo cp -n ~/.espressif/tools/openocd-esp32/v0.12.0-esp32-20230921/openocd-esp32/share/openocd/contrib/60-openocd.rules /etc/udev/rules.d
 
+# CAN bus tools
+sudo apt-get insall -y can-utils
+sudo modprobe can
+sudo modprobe can-raw
+sudo modprobe slcan
+sudo npm install -g socketcan
+sudo npm install -g buffer
+
 # vim: set ts=8 sw=4 ai expandtab :
