@@ -110,4 +110,8 @@ sudo modprobe slcan
 sudo npm install -g socketcan
 sudo npm install -g buffer
 
+# Avahi utilities - for advertising specialized stuff from the command line
+sudo apt-get install -y avahi-utils
+sudo apt-get install -y mdns-scan
+
 # vim: set ts=8 sw=4 ai expandtab :
