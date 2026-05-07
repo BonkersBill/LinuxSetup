@@ -114,4 +114,9 @@ sudo npm install -g buffer
 sudo apt-get install -y avahi-utils
 sudo apt-get install -y mdns-scan
 
+# Syndyne Nugget requirements
+sudo apt-get install -y libspdlog-dev   # Logger
+sudo apt-get install -y liblgpio-dev    # GPIO and interrupt handling library
+sudo apt-get install -y libjansson-dev  # JSON encode/decode
+
 # vim: set ts=8 sw=4 ai expandtab :
