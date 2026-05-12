@@ -64,7 +64,7 @@ popd
 
 # NodeJS
 pushd ~/Downloads
-	curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && sudo apt-get -y install nodejs
+	curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && sudo apt-get -y install nodejs
 popd
 npm install -g pm2
 npm install -g npm@latest
