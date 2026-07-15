@@ -20,6 +20,10 @@ sudo apt-get -y install net-tools
 # SysAdmin Sanity
 sudo apt-get -y install gparted mtools dosfstools
 
+# X11 on Lite Raspbian
+sudo apt -y install xserver-xorg xinit x11-xserver-utils xterm
+sudo apt install raspberrypi-ui-mods
+
 # An X terminal server for remote access
 sudo apt-get -y install lxterminal
 
@@ -30,10 +34,6 @@ sudo apt-get -y install lxsession-default-apps
 sudo apt-get -y install openssh
 sudo systemctl enable ssh
 sudo systemclt start ssh
-
-# X11 on Lite Raspbian
-sudo apt -y install xserver-xorg xinit x11-xserver-utils xterm
-sudo apt install raspberrypi-ui-mods
 
 # Linux Kernel Build
 sudo apt-get -y install build-essential
