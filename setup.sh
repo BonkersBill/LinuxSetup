@@ -34,7 +34,7 @@ sudo systemclt start ssh
 # Linux Kernel Build
 sudo apt-get -y install build-essential
 sudo apt-get -y build-dep linux linux-image-$(uname -r)
-sudo apt-get -y install libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf llvm curl wget
+sudo apt-get -y install libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf llvm curl wget bc
 
 # RPi Crossbuild
 # sudo apt-get -y install git bc bison flex libssl-dev make libc6-dev libncurses5-dev
