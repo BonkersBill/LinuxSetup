@@ -17,12 +17,19 @@ sudo apt -y install nfs-common
 sudo apt -y install smbclient cifs-utils
 sudo apt -y install net-tools
 
-# X11
-#sudo apt install -y cinnamon-desktop-environment
-
 # X11 on Lite Raspbian
 sudo apt install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit xxd xauth
-sudo apt install raspberrypi-ui-mods
+
+# sudo apt install -y cinnamon-desktop-environment
+# sudo update-alternatives --set x-session-manager /usr/bin/cinnamon-session
+
+sudo apt install -y mate-desktop-environment
+sudo update-alternatives --set x-session-manager /usr/bin/mate-session
+sudo apt install -y lightdm-gtk-greeter
+sudo systemctl enable lightdm
+sudo systemctl set-default graphical.target
+
+# sudo apt install -y raspberrypi-ui-mods
 
 # An X terminal server for remote access
 sudo apt -y install lxterminal
@@ -58,10 +65,11 @@ bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 sudo apt -y install clang-format
 
 # Chrome
-pushd ~/Downloads
-	wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-	sudo apt -y install ./google-chrome-stable_current_amd64.deb
-popd
+sudo apt -y install chromium
+# pushd ~/Downloads
+# 	wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+# 	sudo apt -y install ./google-chrome-stable_current_amd64.deb
+# popd
 
 # QT5 (for Cangaroo CANbus tools)
 #sudo apt -y install qt5-qmake qtbase5-dev libnl-3-dev libnl-route-3-dev
@@ -75,11 +83,11 @@ popd
 #  make gcc gcc-multilib g++-multilib libsdl2-dev libmagic1
 
 # NodeJS
-pushd ~/Downloads
-	curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && sudo apt-get -y install nodejs
-popd
-npm install -g pm2
-npm install -g npm@latest
+# pushd ~/Downloads
+#	curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && sudo apt-get -y install nodejs
+# popd
+# npm install -g pm2
+# npm install -g npm@latest
 
 #  Angular
 #npm install -g @angular/cli
