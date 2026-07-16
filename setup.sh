@@ -46,10 +46,10 @@ bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 sudo apt-get -y install clang-format
 
 # Chrome
-pushd ~/Downloads
-	wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-	sudo apt-get -y install ./google-chrome-stable_current_amd64.deb
-popd
+#pushd ~/Downloads
+#	wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+#	sudo apt-get -y install ./google-chrome-stable_current_amd64.deb
+#popd
 
 # QT5 (for Cangaroo CANbus tools)
 #sudo apt-get -y install qt5-qmake qtbase5-dev libnl-3-dev libnl-route-3-dev
@@ -63,11 +63,11 @@ popd
 #  make gcc gcc-multilib g++-multilib libsdl2-dev libmagic1
 
 # NodeJS
-pushd ~/Downloads
-	curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && sudo apt-get -y install nodejs
-popd
-npm install -g pm2
-npm install -g npm@latest
+#pushd ~/Downloads
+#	curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && sudo apt-get -y install nodejs
+#popd
+#npm install -g pm2
+#npm install -g npm@latest
 
 #  Angular
 #npm install -g @angular/cli
