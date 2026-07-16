@@ -18,11 +18,10 @@ sudo apt -y install smbclient cifs-utils
 sudo apt -y install net-tools
 
 # X11
-sudo apt install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit xxd xauth
-sudo apt install -y cinnamon-desktop-environment
+#sudo apt install -y cinnamon-desktop-environment
 
 # X11 on Lite Raspbian
-sudo apt -y install xserver-xorg xinit x11-xserver-utils xterm
+sudo apt install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit xxd xauth
 sudo apt install raspberrypi-ui-mods
 
 # An X terminal server for remote access
