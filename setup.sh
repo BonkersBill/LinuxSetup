@@ -21,6 +21,10 @@ sudo apt -y install net-tools
 sudo apt install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit xxd xauth
 sudo apt install -y cinnamon-desktop-environment
 
+# X11 on Lite Raspbian
+sudo apt -y install xserver-xorg xinit x11-xserver-utils xterm
+sudo apt install raspberrypi-ui-mods
+
 # An X terminal server for remote access
 sudo apt -y install lxterminal
 
@@ -39,7 +43,7 @@ sudo systemclt start ssh
 sudo apt -y install build-essential
 sudo apt -y install build-dep linux linux-image-$(uname -r)
 sudo apt -y install libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev 
-suto apt -y install libudev-dev libpci-dev libiberty-dev autoconf llvm curl wget
+sudo apt -y install libudev-dev libpci-dev libiberty-dev autoconf llvm curl wget bc
 
 # Linux kernel gconfig
 
@@ -73,7 +77,7 @@ popd
 
 # NodeJS
 pushd ~/Downloads
-	curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && sudo apt -y install nodejs
+	curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && sudo apt-get -y install nodejs
 popd
 npm install -g pm2
 npm install -g npm@latest
@@ -122,5 +126,10 @@ sudo npm install -g buffer
 # Avahi utilities - for advertising specialized stuff from the command line
 sudo apt install -y avahi-utils
 sudo apt install -y mdns-scan
+
+# Syndyne Nugget requirements
+sudo apt-get install -y libspdlog-dev   # Logger
+sudo apt-get install -y liblgpio-dev    # GPIO and interrupt handling library
+sudo apt-get install -y libjansson-dev  # JSON encode/decode
 
 # vim: set ts=8 sw=4 ai expandtab ff=unix :
