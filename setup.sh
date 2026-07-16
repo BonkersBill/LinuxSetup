@@ -1,6 +1,6 @@
 #!/bin/bash
-sudo apt-get -y update
-sudo apt-get -y upgrade
+sudo apt -y update
+sudo apt -y full-upgrade
 
 # VMWare shared files
 #sudo echo "vmhgfs-fuse /mnt/hgfs fuse defaults,allow_other 0 0" >> /etc/fstab
@@ -8,63 +8,72 @@ sudo apt-get -y upgrade
 #sudo ln -s /mnt/hgfs/Linux /Host
 
 # Developer Sanity
-sudo apt-get -y install vim vim-addon-manager dos2unix
-sudo update-alternatives --set editor /usr/bin/vim.basic
+sudo apt -y install vim vim-addon-manager dos2unix
+sudo update-alternatives --set editor /usr/bin/vim
 
-sudo apt-get -y install tmux screen
+sudo apt -y install tmux screen
 
-sudo apt-get -y install nfs-common
-sudo apt-get -y install smbclient cifs-utils
-sudo apt-get -y install net-tools
+sudo apt -y install nfs-common
+sudo apt -y install smbclient cifs-utils
+sudo apt -y install net-tools
 
-# SysAdmin Sanity
-sudo apt-get -y install gparted mtools dosfstools
+# X11
+sudo apt install -y --no-install-recommends xserver-xorg x11-xserver-utils xinit xxd xauth
+sudo apt install -y cinnamon-desktop-environment
 
 # An X terminal server for remote access
-sudo apt-get -y install lxterminal
+sudo apt -y install lxterminal
 
 # Raspbian - Add tools for autostart
-sudo apt-get -y install lxsession-default-apps
+sudo apt -y install lxsession-default-apps
+
+# SysAdmin Sanity
+sudo apt -y install gparted mtools dosfstools
 
 # SSH
-sudo apt-get -y install openssh
+sudo apt -y install openssh
 sudo systemctl enable ssh
 sudo systemclt start ssh
 
 # Linux Kernel Build
-sudo apt-get -y install build-essential
-sudo apt-get -y build-dep linux linux-image-$(uname -r)
-sudo apt-get -y install libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev libudev-dev libpci-dev libiberty-dev autoconf llvm curl wget
+sudo apt -y install build-essential
+sudo apt -y install build-dep linux linux-image-$(uname -r)
+sudo apt -y install libncurses-dev gawk flex bison openssl libssl-dev dkms libelf-dev 
+suto apt -y install libudev-dev libpci-dev libiberty-dev autoconf llvm curl wget
+
+# Linux kernel gconfig
+
+sudo apt -y libgtk2.0-dev libglade2-dev
 
 # RPi Crossbuild
-# sudo apt-get -y install git bc bison flex libssl-dev make libc6-dev libncurses5-dev
-# sudo apt-get -y install crossbuild-essential-armhf
-# sudo apt-get -y install crossbuild-essential-arm64
+# sudo apt -y install git bc bison flex libssl-dev make libc6-dev libncurses5-dev
+# sudo apt -y install crossbuild-essential-armhf
+# sudo apt -y install crossbuild-essential-arm64
 
 # Clang
 bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
-sudo apt-get -y install clang-format
+sudo apt -y install clang-format
 
 # Chrome
 pushd ~/Downloads
 	wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-	sudo apt-get -y install ./google-chrome-stable_current_amd64.deb
+	sudo apt -y install ./google-chrome-stable_current_amd64.deb
 popd
 
 # QT5 (for Cangaroo CANbus tools)
-#sudo apt-get -y install qt5-qmake qtbase5-dev libnl-3-dev libnl-route-3-dev
+#sudo apt -y install qt5-qmake qtbase5-dev libnl-3-dev libnl-route-3-dev
 
 # Python 3 (As required by Zephyr)
-# sudo apt-get -y install python3-dev python3-pip python3-setuptools python3-tk python3-wheel python3-venv xz-utils file 
+# sudo apt -y install python3-dev python3-pip python3-setuptools python3-tk python3-wheel python3-venv xz-utils file 
 
 # Zephyr Tools
-#sudo apt-get -y install --no-install-recommends git cmake ninja-build gperf \
+#sudo apt -y install --no-install-recommends git cmake ninja-build gperf \
 #  ccache dfu-util device-tree-compiler wget \
 #  make gcc gcc-multilib g++-multilib libsdl2-dev libmagic1
 
 # NodeJS
 pushd ~/Downloads
-	curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && sudo apt-get -y install nodejs
+	curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && sudo apt -y install nodejs
 popd
 npm install -g pm2
 npm install -g npm@latest
@@ -81,18 +90,18 @@ npm install -g npm@latest
 #popd
 
 # Docker
-#sudo apt-get -y install docker-compose
-#sudo apt-get -y install apt-transport-https ca-certificates curl gnupg2 software-properties-common
+#sudo apt -y install docker-compose
+#sudo apt -y install apt-transport-https ca-certificates curl gnupg2 software-properties-common
 #curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
 #sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
 #sudo curl -L https://github.com/docker/compose/releases/download/1.25.3/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
 #sudo chmod +x /usr/local/bin/docker-compose
 #sudo apt-cache policy docker-ce
-#sudo apt-get -y install docker-ce
+#sudo apt -y install docker-ce
 #sudo usermod -aG docker wcl
 
 # ESP IDF prerequisites
-#sudo apt-get -y install git wget flex bison gperf python3 python3-pip python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
+#sudo apt -y install git wget flex bison gperf python3 python3-pip python3-venv cmake ninja-build ccache libffi-dev libssl-dev dfu-util libusb-1.0-0
 #mkdir -p ~/esp
 #pushd ~/esp
 #	git clone --recursive https://github.com/espressif/esp-idf.git
@@ -103,7 +112,7 @@ npm install -g npm@latest
 #sudo cp -n ~/.espressif/tools/openocd-esp32/v0.12.0-esp32-20230921/openocd-esp32/share/openocd/contrib/60-openocd.rules /etc/udev/rules.d
 
 # CAN bus tools
-sudo apt-get insall -y can-utils
+sudo apt insall -y can-utils
 sudo modprobe can
 sudo modprobe can-raw
 sudo modprobe slcan
@@ -111,7 +120,7 @@ sudo npm install -g socketcan
 sudo npm install -g buffer
 
 # Avahi utilities - for advertising specialized stuff from the command line
-sudo apt-get install -y avahi-utils
-sudo apt-get install -y mdns-scan
+sudo apt install -y avahi-utils
+sudo apt install -y mdns-scan
 
-# vim: set ts=8 sw=4 ai expandtab :
+# vim: set ts=8 sw=4 ai expandtab ff=unix :
