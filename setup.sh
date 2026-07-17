@@ -9,7 +9,7 @@ sudo apt -y full-upgrade
 
 # Developer Sanity
 sudo apt -y install vim vim-addon-manager dos2unix
-sudo update-alternatives --set editor /usr/bin/vim
+sudo update-alternatives --set editor /usr/bin/vim.basic
 
 sudo apt -y install tmux screen
 
@@ -29,6 +29,7 @@ sudo apt install -y lightdm-gtk-greeter
 sudo systemctl enable lightdm
 sudo systemctl set-default graphical.target
 
+sudo apt -y install lpplug-cputemp lpplug
 # sudo apt install -y raspberrypi-ui-mods
 
 # An X terminal server for remote access
