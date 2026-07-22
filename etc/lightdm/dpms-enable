@@ -1,0 +1,8 @@
+(
+    # This delay is required. Might be because the X server isn't
+    # started yet.
+    sleep 10
+
+    # Set up a 5 minute timeout before powering off the display.
+    xset dpms 0 0 300 
+) &

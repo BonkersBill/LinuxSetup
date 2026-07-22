@@ -1,0 +1,11 @@
+#!/bin/sh
+
+(
+    # This delay is required. Might be because the X server isn't
+    # started yet.
+    sleep 10
+
+    # Turn off X's handling of dpms timeout. Otherwise
+    # gnome-settings-daemon and gnome-screensaver will fight over it.
+    xset dpms 0 0 0 
+) &
