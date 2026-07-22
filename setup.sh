@@ -81,7 +81,7 @@ sudo apt -y install chromium
 
 # NodeJS
 # pushd ~/Downloads
-#	curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && sudo apt-get -y install nodejs
+#	curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && sudo apt -y install nodejs
 # popd
 # npm install -g pm2
 # npm install -g npm@latest
@@ -132,8 +132,11 @@ sudo apt install -y avahi-utils
 sudo apt install -y mdns-scan
 
 # Syndyne Nugget requirements
-sudo apt-get install -y libspdlog-dev   # Logger
-sudo apt-get install -y liblgpio-dev    # GPIO and interrupt handling library
-sudo apt-get install -y libjansson-dev  # JSON encode/decode
+sudo apt install -y libspdlog-dev   # Logger
+sudo apt install -y liblgpio-dev    # GPIO and interrupt handling library
+sudo apt install -y libjansson-dev  # JSON encode/decode
+
+# Add gccmakedep from X11 tools used in Nugget makefiles - handles C++ versions better than mkdep
+sudo apt install -y xutils-dev
 
 # vim: set ts=8 sw=4 ai expandtab ff=unix :
