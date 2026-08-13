@@ -65,8 +65,13 @@ sudo apt -y libgtk2.0-dev libglade2-dev
 bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 sudo apt -y install clang-format
 
-# Chrome
-sudo apt -y install chromium
+# Chrome - do not use default chromium package because it is locked to DuckDuckGo
+pushd ~/Downloads
+# popd
+	sudo rm google-chrome-stable_current_amd64.deb
+	wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+	sudo dpkg -i google-chrome-stable_current_amd64.deb
+popd
 
 # QT5 (for Cangaroo CANbus tools)
 #sudo apt -y install qt5-qmake qtbase5-dev libnl-3-dev libnl-route-3-dev
@@ -80,11 +85,13 @@ sudo apt -y install chromium
 #  make gcc gcc-multilib g++-multilib libsdl2-dev libmagic1
 
 # NodeJS
-# pushd ~/Downloads
-#	curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && sudo apt -y install nodejs
-# popd
-# npm install -g pm2
-# npm install -g npm@latest
+pushd ~/Downloads
+	curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.6/install.sh | bash
+popd
+source ~/.bashrc
+nvm install --lts
+npm install -g pm2
+npm install -g npm@latest
 
 #  Angular
 #npm install -g @angular/cli
@@ -135,6 +142,7 @@ sudo apt install -y mdns-scan
 sudo apt install -y libspdlog-dev   # Logger
 sudo apt install -y liblgpio-dev    # GPIO and interrupt handling library
 sudo apt install -y libjansson-dev  # JSON encode/decode
+sudo apt install -y libsqlite3-dev  # SQLite 3
 
 # Add gccmakedep from X11 tools used in Nugget makefiles - handles C++ versions better than mkdep
 sudo apt install -y xutils-dev

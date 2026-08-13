@@ -1,35 +1,37 @@
 #!/bin/bash
+pushd scripts
 # Update FIRST
-update.sh
-#
+    update.sh
 # Then the rest
-#angular.sh
-autostart.sh
-avahi.sh
-canbus.sh
-#chrome-amd64.sh
-chrome-arm64.sh
-#cinnamon.sh
-clang-format.sh
-disktools.sh
-docker.sh
-editor.sh
-#esp-idf.sh
-kernelbuild.sh
-libv8.sh
-makedep.sh
-mate.sh
-#nfs.sh
-nginx.sh
-nodejs.sh
-#nodeRED.sh
-python3.sh
-#qt5.sh
-rpi-crossbuild.sh
-#rpi-ui-mods.sh
-screen.sh
-ssh.sh
-terminals.sh
-vmware.sh
-X11.sh
-#zephyr-tools.sh
+    #angular.sh
+    autostart.sh
+    avahi.sh
+    canbus.sh
+    #chrome-amd64.sh
+    chrome-arm64.sh
+    #cinnamon.sh
+    clang-format.sh
+    disktools.sh
+    docker.sh
+    editor.sh
+    #esp-idf.sh
+    kernelbuild.sh
+    libv8.sh
+    makedep.sh
+    mate.sh
+    #nfs.sh
+    nginx.sh
+    nodejs.sh
+    #nodeRED.sh
+    python3.sh
+    #qt5.sh
+    rpi-crossbuild.sh
+    #rpi-ui-mods.sh
+    screen.sh
+    ssh.sh
+    sshpass.sh
+    terminals.sh
+    vmware.sh
+    X11.sh
+    #zephyr-tools.sh
+popd
