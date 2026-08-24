@@ -2,6 +2,8 @@
 pushd scripts
 # Update FIRST
     update.sh
+# Make sure the syndyne user exists for whatever happens later
+    syndyne-user.sh
 # Then the rest
     #angular.sh
     autostart.sh
