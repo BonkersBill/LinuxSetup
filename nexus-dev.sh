@@ -22,6 +22,7 @@ pushd scripts
     #nfs.sh
     nginx.sh
     nodejs.sh
+    nodejs_express.sh
     #nodeRED.sh
     python3.sh
     #qt5.sh
@@ -31,7 +32,7 @@ pushd scripts
     ssh.sh
     sshpass.sh
     terminals.sh
-    vmware.sh
+    # vmware.sh
     X11.sh
     #zephyr-tools.sh
 popd
