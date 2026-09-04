@@ -21,6 +21,7 @@ pushd scripts
     libv8.sh
     makedep.sh
     mate.sh
+    mosquitto.sh
     #nfs.sh
     nginx.sh
     nodejs.sh
