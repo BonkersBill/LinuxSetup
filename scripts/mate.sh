@@ -1,6 +1,7 @@
 #!/bin/bash
 sudo apt install -y mate-desktop-environment
 sudo update-alternatives --set x-session-manager /usr/bin/mate-session
+sudo apt install -y network-manager-gnome
 sudo apt install -y lightdm-gtk-greeter
 sudo systemctl enable lightdm
 sudo systemctl set-default graphical.target
