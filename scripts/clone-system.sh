@@ -7,6 +7,10 @@
 # source layout), filesystems are created, the system is copied with rsync,
 # and fstab / cmdline.txt / GRUB / initramfs are fixed up for the new layout.
 #
+# Partition 1 starts at --first-sector (need not be aligned). Its end - and the
+# end of every later partition - is rounded up so that each following partition
+# starts on a multiple of --align sectors (default 2048).
+#
 # Supported boot modes (auto-detected, override with --mode):
 #   pi    Raspberry Pi firmware boot  (FAT boot partition + cmdline.txt)
 #   efi   UEFI + GRUB                 (ESP at /boot/efi)
@@ -24,7 +28,7 @@
 #
 set -Eeuo pipefail
 
-readonly VERSION="1.0"
+readonly VERSION="1.1"
 readonly PROG=${0##*/}
 
 # ----------------------------------------------------------------- defaults --
@@ -35,17 +39,19 @@ TABLE=""                # msdos | gpt                (auto)
 BOOT_SIZE="512M"        # Pi boot / EFI system partition
 ROOT_SPEC="rest"        # SIZE[:FS]
 SWAP_SIZE="0"
-START_MIB=4             # first partition offset (Pi images use 4 MiB)
+FIRST_SECTOR=""         # start of partition 1        (default: 4 MiB worth of sectors)
+ALIGN_SECTORS=2048      # partitions 2.. start on multiples of this
 NEW_HOSTNAME=""
 RESET_ID=0
 ASSUME_YES=0
 PLAN_ONLY=0
 declare -a EXTRA_SPECS=() EXCLUDES=()
 
-# Layout arrays (one entry per partition, same index everywhere)
+# Layout arrays (one entry per partition, same index everywhere).
+# P_SIZE is in MiB (-1 = rest); P_START / P_END are sectors (P_END inclusive).
 declare -a P_ROLE=() P_MNT=() P_SIZE=() P_FS=() P_LABEL=()
 declare -a P_NUM=() P_DEV=() P_START=() P_END=()
-USE_EXT=0 EXT_START=0 DISK_MIB=0
+USE_EXT=0 EXT_START=0 END_LIMIT_S=0 SECTOR_SIZE=512 DISK_MIB=0
 
 MNT=""
 PI_BOOT_DIR=""
@@ -73,6 +79,9 @@ Layout options (sizes: 512M, 32G, 1T, or "rest" for all remaining space):
   -p, --part MNT:SIZE[:FS] Extra partition, repeatable. e.g. /home:rest  /var:10G:xfs
   -w, --swap SIZE          Swap partition (0 = none)               (default: $SWAP_SIZE)
   -t, --table msdos|gpt    Partition table   (default: msdos for pi, gpt otherwise)
+  -f, --first-sector N     Start sector of partition 1 (default: 4 MiB, i.e. 8192 on 512-byte disks)
+  -a, --align N            Partitions 2.. start on multiples of N sectors (default: $ALIGN_SECTORS).
+                           Partition 1 (and each later one) is sized up to reach the next boundary.
       FS is one of: ext4 (default), ext3, ext2, xfs, btrfs, f2fs, vfat
       Exactly one partition may be "rest"; it is placed last on the disk.
 
@@ -114,6 +123,12 @@ human_mib() {
   else echo "$m MiB"; fi
 }
 
+# Sectors -> whole MiB
+s_to_mib() { echo $(( $1 * SECTOR_SIZE / 1048576 )); }
+
+# Round a sector number up to the next alignment boundary
+round_up() { echo $(( ($1 + ALIGN_SECTORS - 1) / ALIGN_SECTORS * ALIGN_SECTORS )); }
+
 # /dev/sda + 2 -> /dev/sda2 ; /dev/nvme0n1 + 2 -> /dev/nvme0n1p2
 part_dev() { if [[ $1 =~ [0-9]$ ]]; then echo "${1}p$2"; else echo "$1$2"; fi; }
 
@@ -128,6 +143,8 @@ parse_args() {
       -p|--part)           EXTRA_SPECS+=("${2:?}"); shift ;;
       -w|--swap)           SWAP_SIZE=${2:?}; shift ;;
       -t|--table)          TABLE=${2:?}; shift ;;
+      -f|--first-sector)   FIRST_SECTOR=${2:?}; shift ;;
+      -a|--align)          ALIGN_SECTORS=${2:?}; shift ;;
       -s|--source)         SRC=${2:?}; shift ;;
       -m|--mode)           MODE=${2:?}; shift ;;
       -x|--exclude)        EXCLUDES+=("${2:?}"); shift ;;
@@ -144,6 +161,8 @@ parse_args() {
   [[ -n $TARGET ]] || { usage; exit 1; }
   [[ -z $TABLE || $TABLE =~ ^(msdos|gpt)$ ]] || die "--table must be msdos or gpt"
   [[ -z $MODE  || $MODE  =~ ^(pi|efi|bios)$ ]] || die "--mode must be pi, efi or bios"
+  [[ -z $FIRST_SECTOR || $FIRST_SECTOR =~ ^[0-9]+$ ]] || die "--first-sector must be a sector number"
+  [[ $ALIGN_SECTORS =~ ^[1-9][0-9]*$ ]] || die "--align must be a positive number of sectors"
   [[ -z $NEW_HOSTNAME || $NEW_HOSTNAME =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]] \
     || die "Invalid hostname '$NEW_HOSTNAME'"
   # Validate sizes here, in the main shell, so a bad value aborts immediately
@@ -283,27 +302,45 @@ build_layout() {
   fi
 }
 
-# Compute partition numbers, device names and MiB boundaries
+# Compute partition numbers, device names and sector boundaries.
+# Partition 1 starts at FIRST_SECTOR; every partition's end is rounded up so the
+# next one starts on an ALIGN_SECTORS boundary.
 plan_layout() {
-  local end_limit start end size num=0 n=${#P_ROLE[@]} i
-  DISK_MIB=$(( $(blockdev --getsize64 "$TARGET") / 1048576 ))
-  end_limit=$(( DISK_MIB - 1 ))       # keep last MiB free (GPT backup header)
+  local total_s spm start next end size num=0 n=${#P_ROLE[@]} i
+  SECTOR_SIZE=$(blockdev --getss "$TARGET")
+  total_s=$(( $(blockdev --getsize64 "$TARGET") / SECTOR_SIZE ))
+  DISK_MIB=$(s_to_mib "$total_s")
+  spm=$(( 1048576 / SECTOR_SIZE ))                            # sectors per MiB
+
+  [[ -n $FIRST_SECTOR ]] || FIRST_SECTOR=$(( 4 * spm ))
+  (( FIRST_SECTOR >= 34 )) || die "--first-sector must be at least 34 (room for the partition table)"
+  if (( FIRST_SECTOR % ALIGN_SECTORS )); then
+    warn "Partition 1 starts at unaligned sector $FIRST_SECTOR; it will be sized up so partition 2 is aligned."
+  fi
+  # Last sector a partition may use: stay clear of the GPT backup, end just before a boundary
+  END_LIMIT_S=$(( (total_s - 34) / ALIGN_SECTORS * ALIGN_SECTORS - 1 ))
 
   if [[ $TABLE == msdos ]] && (( n > 4 )); then USE_EXT=1; fi
-  start=$START_MIB
+  start=$FIRST_SECTOR
   for (( i = 0; i < n; i++ )); do
     if (( USE_EXT && i == 3 )); then   # partitions 4.. become logicals (5, 6, ...)
-      EXT_START=$start; num=4; start=$(( start + 1 ))
+      EXT_START=$start; num=4; start=$(( start + ALIGN_SECTORS ))   # room for the first EBR
     fi
     size=${P_SIZE[i]}
-    if (( size < 0 )); then end=$end_limit; else end=$(( start + size )); fi
-    (( end <= end_limit )) \
-      || die "Layout does not fit: '${P_MNT[i]}' would end at $(human_mib "$end"), disk is $(human_mib "$DISK_MIB")"
-    [[ ${P_ROLE[i]} == biosgrub ]] || (( end - start >= 16 )) \
+    if (( size < 0 )); then
+      next=$(( END_LIMIT_S + 1 ))
+    else
+      next=$(round_up $(( start + size * spm )))
+    fi
+    end=$(( next - 1 ))
+    (( end <= END_LIMIT_S )) \
+      || die "Layout does not fit: '${P_MNT[i]}' would end at $(human_mib "$(s_to_mib "$next")"), disk is $(human_mib "$DISK_MIB")"
+    [[ ${P_ROLE[i]} == biosgrub ]] || (( end - start + 1 >= 16 * spm )) \
       || die "Not enough space left for '${P_MNT[i]}'"
     num=$(( num + 1 ))
     P_START[i]=$start; P_END[i]=$end; P_NUM[i]=$num; P_DEV[i]=$(part_dev "$TARGET" "$num")
-    if (( USE_EXT && i >= 3 )); then start=$(( end + 1 )); else start=$end; fi   # 1 MiB gap for EBRs
+    start=$next
+    if (( USE_EXT && i >= 3 )); then start=$(( start + ALIGN_SECTORS )); fi   # room for the next EBR
   done
 }
 
@@ -335,15 +372,17 @@ show_plan() {
     printf '   %-22s %-6s %10s used\n' "${SRC_REL[i]}" "${SRC_FSTYPE[i]}" "$(human_mib "$u")"
   done
   echo
-  printf '%sTarget%s  %s  %s  %s   (table: %s)\n' "$C_B" "$C_0" "$TARGET" \
-    "$(lsblk -dno MODEL "$TARGET" 2>/dev/null | xargs)" "$(human_mib "$DISK_MIB")" "$TABLE"
-  printf '   %-3s %-18s %10s  %-6s %s\n' "#" "Device" "Size" "FS" "Mount"
+  printf '%sTarget%s  %s  %s  %s   (table: %s, %s-byte sectors)\n' "$C_B" "$C_0" "$TARGET" \
+    "$(lsblk -dno MODEL "$TARGET" 2>/dev/null | xargs)" "$(human_mib "$DISK_MIB")" "$TABLE" "$SECTOR_SIZE"
+  printf '   %-3s %-18s %12s %12s %10s  %-6s %s\n' "#" "Device" "Start" "End" "Size" "FS" "Mount"
   for i in "${!P_ROLE[@]}"; do
-    size=$(( P_END[i] - P_START[i] ))
+    size=$(s_to_mib $(( P_END[i] - P_START[i] + 1 )))
     [[ ${P_ROLE[i]} =~ ^(root|data|boot)$ ]] && cap=$(( cap + size ))
     what=${P_MNT[i]}; [[ ${P_ROLE[i]} == biosgrub ]] && what="(BIOS boot)"
-    printf '   %-3s %-18s %10s  %-6s %s\n' "${P_NUM[i]}" "${P_DEV[i]}" "$(human_mib "$size")" "${P_FS[i]}" "$what"
+    printf '   %-3s %-18s %12s %12s %10s  %-6s %s\n' "${P_NUM[i]}" "${P_DEV[i]}" \
+      "${P_START[i]}" "${P_END[i]}" "$(human_mib "$size")" "${P_FS[i]}" "$what"
   done
+  echo "   (sectors; partitions after the first start on ${ALIGN_SECTORS}-sector boundaries)"
   if (( USE_EXT )); then echo "   (partitions 5+ are logical partitions inside an extended partition)"; fi
   echo
   (( used * 105 / 100 < cap )) \
@@ -390,20 +429,21 @@ partition_disk() {
   local i ptype fstype name t
   log "Wiping $TARGET"
   wipefs -a -q "$TARGET"
-  dd if=/dev/zero of="$TARGET" bs=1M count=$START_MIB conv=fsync status=none
+  dd if=/dev/zero of="$TARGET" bs="$SECTOR_SIZE" count="$FIRST_SECTOR" conv=fsync status=none
   parted -s "$TARGET" mklabel "$TABLE"
 
+  # -a none: use our exact sector numbers; alignment was already worked out in plan_layout
   for i in "${!P_ROLE[@]}"; do
     if (( USE_EXT && i == 3 )); then
-      parted -s -a optimal "$TARGET" mkpart extended "${EXT_START}MiB" "$(( DISK_MIB - 1 ))MiB"
+      parted -s -a none "$TARGET" mkpart extended "${EXT_START}s" "${END_LIMIT_S}s"
     fi
     case ${P_FS[i]} in vfat) fstype=fat32 ;; swap) fstype=linux-swap ;; *) fstype=ext4 ;; esac
     if [[ $TABLE == gpt ]]; then
       name=${P_LABEL[i]:-${P_ROLE[i]}}
-      parted -s -a optimal "$TARGET" mkpart "$name" "$fstype" "${P_START[i]}MiB" "${P_END[i]}MiB"
+      parted -s -a none "$TARGET" mkpart "$name" "$fstype" "${P_START[i]}s" "${P_END[i]}s"
     else
       if (( USE_EXT && i >= 3 )); then ptype=logical; else ptype=primary; fi
-      parted -s -a optimal "$TARGET" mkpart "$ptype" "$fstype" "${P_START[i]}MiB" "${P_END[i]}MiB"
+      parted -s -a none "$TARGET" mkpart "$ptype" "$fstype" "${P_START[i]}s" "${P_END[i]}s"
     fi
     case $MODE:${P_ROLE[i]}:$TABLE in
       pi:boot:msdos)      parted -s "$TARGET" set "${P_NUM[i]}" lba on ;;
@@ -422,7 +462,7 @@ partition_disk() {
       sleep 0.5
     done
   done
-  parted -s "$TARGET" unit MiB print
+  parted -s "$TARGET" unit s print
 }
 
 check_mkfs_tools() {
