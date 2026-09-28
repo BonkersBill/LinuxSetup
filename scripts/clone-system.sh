@@ -28,7 +28,7 @@
 #
 set -Eeuo pipefail
 
-readonly VERSION="1.1"
+readonly VERSION="1.2"
 readonly PROG=${0##*/}
 
 # ----------------------------------------------------------------- defaults --
@@ -52,6 +52,8 @@ declare -a EXTRA_SPECS=() EXCLUDES=()
 declare -a P_ROLE=() P_MNT=() P_SIZE=() P_FS=() P_LABEL=()
 declare -a P_NUM=() P_DEV=() P_START=() P_END=()
 USE_EXT=0 EXT_START=0 END_LIMIT_S=0 SECTOR_SIZE=512 DISK_MIB=0
+# Alignment actually used: partition starts are  k * STEP_S + ALIGN_OFF_S  (sectors)
+STEP_S=2048 ALIGN_OFF_S=0 GRAIN_S=1 USE_TOPOLOGY=1 TOPO_DESC=""
 
 MNT=""
 PI_BOOT_DIR=""
@@ -82,6 +84,9 @@ Layout options (sizes: 512M, 32G, 1T, or "rest" for all remaining space):
   -f, --first-sector N     Start sector of partition 1 (default: 4 MiB, i.e. 8192 on 512-byte disks)
   -a, --align N            Partitions 2.. start on multiples of N sectors (default: $ALIGN_SECTORS).
                            Partition 1 (and each later one) is sized up to reach the next boundary.
+                           The disk's reported I/O topology (physical block size, minimum I/O
+                           size, alignment offset) is honoured too, so mkfs sees aligned partitions.
+      --no-topology        Ignore the disk's reported topology; align to --align only
       FS is one of: ext4 (default), ext3, ext2, xfs, btrfs, f2fs, vfat
       Exactly one partition may be "rest"; it is placed last on the disk.
 
@@ -127,7 +132,44 @@ human_mib() {
 s_to_mib() { echo $(( $1 * SECTOR_SIZE / 1048576 )); }
 
 # Round a sector number up to the next alignment boundary
-round_up() { echo $(( ($1 + ALIGN_SECTORS - 1) / ALIGN_SECTORS * ALIGN_SECTORS )); }
+round_up() { echo $(( ($1 - ALIGN_OFF_S + STEP_S - 1) / STEP_S * STEP_S + ALIGN_OFF_S )); }
+
+gcd() { local a=$1 b=$2 t; while (( b )); do t=$(( a % b )); a=$b; b=$t; done; echo "$a"; }
+
+# Work out where partitions must start so the kernel (and therefore mkfs) reports
+# alignment_offset 0 for them. The kernel's rule (queue_limit_alignment_offset):
+#   grain  = max(physical_block_size, minimum_io_size)
+#   offset = (grain + disk_alignment_offset - start_bytes % grain) % grain
+# so a partition is aligned when  start_bytes ≡ disk_alignment_offset (mod grain).
+# We combine that with ALIGN_SECTORS: starts = k * lcm(ALIGN_SECTORS, grain) + offset.
+read_topology() {
+  local q=/sys/block/${TARGET##*/} pbs iomin aoff grain lcm
+  pbs=$(cat "$q/queue/physical_block_size" 2>/dev/null || echo "$SECTOR_SIZE")
+  iomin=$(cat "$q/queue/minimum_io_size" 2>/dev/null || echo "$SECTOR_SIZE")
+  aoff=$(cat "$q/alignment_offset" 2>/dev/null || echo 0)
+  TOPO_DESC="physical block ${pbs}B, minimum I/O ${iomin}B, alignment offset ${aoff}B"
+
+  STEP_S=$ALIGN_SECTORS ALIGN_OFF_S=0 GRAIN_S=1
+  (( USE_TOPOLOGY )) || return 0
+  if (( aoff < 0 )); then
+    warn "Kernel reports $TARGET cannot be aligned (alignment_offset=$aoff); using ${ALIGN_SECTORS}-sector alignment."
+    return 0
+  fi
+  grain=$(( pbs > iomin ? pbs : iomin ))
+  GRAIN_S=$(( (grain + SECTOR_SIZE - 1) / SECTOR_SIZE ))
+  ALIGN_OFF_S=$(( aoff / SECTOR_SIZE % GRAIN_S ))
+  lcm=$(( ALIGN_SECTORS / $(gcd "$ALIGN_SECTORS" "$GRAIN_S") * GRAIN_S ))
+  if (( lcm * SECTOR_SIZE <= 256 * 1048576 )); then
+    STEP_S=$lcm
+  else
+    # e.g. USB bridges reporting a bogus minimum_io_size of 65535 sectors
+    warn "$TARGET reports an unusual I/O grain of $GRAIN_S sectors; aligning to that instead of ${ALIGN_SECTORS}."
+    STEP_S=$GRAIN_S
+  fi
+  if (( STEP_S != ALIGN_SECTORS || ALIGN_OFF_S )); then
+    warn "Device topology ($TOPO_DESC): partitions will start at multiples of $STEP_S sectors + $ALIGN_OFF_S."
+  fi
+}
 
 # /dev/sda + 2 -> /dev/sda2 ; /dev/nvme0n1 + 2 -> /dev/nvme0n1p2
 part_dev() { if [[ $1 =~ [0-9]$ ]]; then echo "${1}p$2"; else echo "$1$2"; fi; }
@@ -145,6 +187,7 @@ parse_args() {
       -t|--table)          TABLE=${2:?}; shift ;;
       -f|--first-sector)   FIRST_SECTOR=${2:?}; shift ;;
       -a|--align)          ALIGN_SECTORS=${2:?}; shift ;;
+      --no-topology)       USE_TOPOLOGY=0 ;;
       -s|--source)         SRC=${2:?}; shift ;;
       -m|--mode)           MODE=${2:?}; shift ;;
       -x|--exclude)        EXCLUDES+=("${2:?}"); shift ;;
@@ -304,27 +347,28 @@ build_layout() {
 
 # Compute partition numbers, device names and sector boundaries.
 # Partition 1 starts at FIRST_SECTOR; every partition's end is rounded up so the
-# next one starts on an ALIGN_SECTORS boundary.
+# next one starts on an alignment boundary (see read_topology).
 plan_layout() {
   local total_s spm start next end size num=0 n=${#P_ROLE[@]} i
   SECTOR_SIZE=$(blockdev --getss "$TARGET")
   total_s=$(( $(blockdev --getsize64 "$TARGET") / SECTOR_SIZE ))
   DISK_MIB=$(s_to_mib "$total_s")
   spm=$(( 1048576 / SECTOR_SIZE ))                            # sectors per MiB
+  read_topology
 
-  [[ -n $FIRST_SECTOR ]] || FIRST_SECTOR=$(( 4 * spm ))
+  [[ -n $FIRST_SECTOR ]] || FIRST_SECTOR=$(round_up $(( 4 * spm )))
   (( FIRST_SECTOR >= 34 )) || die "--first-sector must be at least 34 (room for the partition table)"
-  if (( FIRST_SECTOR % ALIGN_SECTORS )); then
+  if (( (FIRST_SECTOR - ALIGN_OFF_S) % STEP_S )); then
     warn "Partition 1 starts at unaligned sector $FIRST_SECTOR; it will be sized up so partition 2 is aligned."
   fi
   # Last sector a partition may use: stay clear of the GPT backup, end just before a boundary
-  END_LIMIT_S=$(( (total_s - 34) / ALIGN_SECTORS * ALIGN_SECTORS - 1 ))
+  END_LIMIT_S=$(( (total_s - 34 - ALIGN_OFF_S) / STEP_S * STEP_S + ALIGN_OFF_S - 1 ))
 
   if [[ $TABLE == msdos ]] && (( n > 4 )); then USE_EXT=1; fi
   start=$FIRST_SECTOR
   for (( i = 0; i < n; i++ )); do
     if (( USE_EXT && i == 3 )); then   # partitions 4.. become logicals (5, 6, ...)
-      EXT_START=$start; num=4; start=$(( start + ALIGN_SECTORS ))   # room for the first EBR
+      EXT_START=$start; num=4; start=$(( start + STEP_S ))   # room for the first EBR
     fi
     size=${P_SIZE[i]}
     if (( size < 0 )); then
@@ -340,7 +384,7 @@ plan_layout() {
     num=$(( num + 1 ))
     P_START[i]=$start; P_END[i]=$end; P_NUM[i]=$num; P_DEV[i]=$(part_dev "$TARGET" "$num")
     start=$next
-    if (( USE_EXT && i >= 3 )); then start=$(( start + ALIGN_SECTORS )); fi   # room for the next EBR
+    if (( USE_EXT && i >= 3 )); then start=$(( start + STEP_S )); fi   # room for the next EBR
   done
 }
 
@@ -382,7 +426,8 @@ show_plan() {
     printf '   %-3s %-18s %12s %12s %10s  %-6s %s\n' "${P_NUM[i]}" "${P_DEV[i]}" \
       "${P_START[i]}" "${P_END[i]}" "$(human_mib "$size")" "${P_FS[i]}" "$what"
   done
-  echo "   (sectors; partitions after the first start on ${ALIGN_SECTORS}-sector boundaries)"
+  echo "   (sectors; partitions after the first start at multiples of $STEP_S sectors + $ALIGN_OFF_S)"
+  echo "   (device topology: $TOPO_DESC)"
   if (( USE_EXT )); then echo "   (partitions 5+ are logical partitions inside an extended partition)"; fi
   echo
   (( used * 105 / 100 < cap )) \
@@ -463,6 +508,15 @@ partition_disk() {
     done
   done
   parted -s "$TARGET" unit s print
+
+  # Check what the kernel (and so mkfs) thinks of the new partitions
+  local off
+  for i in "${!P_DEV[@]}"; do
+    off=$(cat "/sys/class/block/${P_DEV[i]##*/}/alignment_offset" 2>/dev/null || echo 0)
+    if (( off != 0 )); then
+      warn "${P_DEV[i]} alignment is offset by $off bytes ($TOPO_DESC)"
+    fi
+  done
 }
 
 check_mkfs_tools() {
