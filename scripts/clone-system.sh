@@ -697,4 +697,7 @@ main() {
     efi)  echo "Boot $TARGET from the firmware boot menu (installed on the removable path, so it works on any machine)." ;;
     bios) echo "Select $TARGET as the boot disk in the BIOS." ;;
   esac
-  echo "Originals are kept on the clone as /etc/fstab.pre-clone$( [[ $MODE == pi ]] && echo " and $PI
+  echo "Originals are kept on the clone as /etc/fstab.pre-clone$( [[ $MODE == pi ]] && echo " and $PI_BOOT_DIR/cmdline.txt.pre-clone")."
+}
+
+main "$@"
