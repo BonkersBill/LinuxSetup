@@ -415,22 +415,17 @@ collect_sources() {
   [[ ${SRC_REL[0]:-} == / ]] || die "Could not identify the source root filesystem at $SRC"
 }
 
-show_plan() {
-  local i size used=0 cap=0 u what
-  echo
-  printf '%sSource%s  %s   (mode: %s)\n' "$C_B" "$C_0" "$SRC" "$MODE"
-  for i in "${!SRC_MP[@]}"; do
-    u=$(df -B1M --output=used "${SRC_MP[i]}" | tail -n1 | tr -d ' ')
-    used=$(( used + u ))
-    printf '   %-22s %-6s %10s used\n' "${SRC_REL[i]}" "${SRC_FSTYPE[i]}" "$(human_mib "$u")"
-  done
-  echo
+# Print the planned target layout; sets PLAN_CAP_MIB to the usable data capacity
+PLAN_CAP_MIB=0
+print_target_layout() {
+  local i size what
+  PLAN_CAP_MIB=0
   printf '%sTarget%s  %s  %s  %s   (table: %s, %s-byte sectors)\n' "$C_B" "$C_0" "$TARGET" \
     "$(lsblk -dno MODEL "$TARGET" 2>/dev/null | xargs)" "$(human_mib "$DISK_MIB")" "$TABLE" "$SECTOR_SIZE"
   printf '   %-3s %-18s %12s %12s %10s  %-6s %s\n' "#" "Device" "Start" "End" "Size" "FS" "Mount"
   for i in "${!P_ROLE[@]}"; do
     size=$(s_to_mib $(( P_END[i] - P_START[i] + 1 )))
-    [[ ${P_ROLE[i]} =~ ^(root|data|boot)$ ]] && cap=$(( cap + size ))
+    [[ ${P_ROLE[i]} =~ ^(root|data|boot)$ ]] && PLAN_CAP_MIB=$(( PLAN_CAP_MIB + size ))
     what=${P_MNT[i]}; [[ ${P_ROLE[i]} == biosgrub ]] && what="(BIOS boot)"
     printf '   %-3s %-18s %12s %12s %10s  %-6s %s\n' "${P_NUM[i]}" "${P_DEV[i]}" \
       "${P_START[i]}" "${P_END[i]}" "$(human_mib "$size")" "${P_FS[i]}" "$what"
@@ -439,6 +434,20 @@ show_plan() {
   echo "   (device topology: $TOPO_DESC)"
   if (( USE_EXT )); then echo "   (partitions 5+ are logical partitions inside an extended partition)"; fi
   echo
+}
+
+show_plan() {
+  local i used=0 cap u
+  echo
+  printf '%sSource%s  %s   (mode: %s)\n' "$C_B" "$C_0" "$SRC" "$MODE"
+  for i in "${!SRC_MP[@]}"; do
+    u=$(df -B1M --output=used "${SRC_MP[i]}" | tail -n1 | tr -d ' ')
+    used=$(( used + u ))
+    printf '   %-22s %-6s %10s used\n' "${SRC_REL[i]}" "${SRC_FSTYPE[i]}" "$(human_mib "$u")"
+  done
+  echo
+  print_target_layout
+  cap=$PLAN_CAP_MIB
   (( used * 105 / 100 < cap )) \
     || die "Source uses $(human_mib "$used") but the new layout only holds $(human_mib "$cap")"
   echo "Data to copy: ~$(human_mib "$used"), capacity of new layout: $(human_mib "$cap")"
@@ -827,4 +836,7 @@ main() {
   echo "Originals are kept on the clone as /etc/fstab.pre-clone$( [[ $MODE == pi ]] && echo " and $PI_BOOT_DIR/cmdline.txt.pre-clone")."
 }
 
-main "$@"
+# system-restore.sh sources this file for its partitioning functions; only run when executed
+if [[ ${BASH_SOURCE[0]} == "$0" ]]; then
+  main "$@"
+fi
