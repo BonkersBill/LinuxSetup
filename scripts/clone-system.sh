@@ -28,7 +28,7 @@
 #
 set -Eeuo pipefail
 
-readonly VERSION="1.2"
+readonly VERSION="1.3"
 readonly PROG=${0##*/}
 
 # ----------------------------------------------------------------- defaults --
@@ -40,6 +40,7 @@ BOOT_SIZE="512M"        # Pi boot / EFI system partition
 ROOT_SPEC="rest"        # SIZE[:FS]
 SWAP_SIZE="0"
 FIRST_SECTOR=""         # start of partition 1        (default: 4 MiB worth of sectors)
+FIRST_SECTOR_USER=0     # 1 when --first-sector was given
 ALIGN_SECTORS=2048      # partitions 2.. start on multiples of this
 NEW_HOSTNAME=""
 RESET_ID=0
@@ -142,11 +143,19 @@ gcd() { local a=$1 b=$2 t; while (( b )); do t=$(( a % b )); a=$b; b=$t; done; e
 #   offset = (grain + disk_alignment_offset - start_bytes % grain) % grain
 # so a partition is aligned when  start_bytes ≡ disk_alignment_offset (mod grain).
 # We combine that with ALIGN_SECTORS: starts = k * lcm(ALIGN_SECTORS, grain) + offset.
+#
+# USB/UAS bridges often report plain 512-byte values until the disk is revalidated
+# (which parted/partprobe trigger), so force a rescan first to see the real values.
 read_topology() {
-  local q=/sys/block/${TARGET##*/} pbs iomin aoff grain lcm
-  pbs=$(cat "$q/queue/physical_block_size" 2>/dev/null || echo "$SECTOR_SIZE")
-  iomin=$(cat "$q/queue/minimum_io_size" 2>/dev/null || echo "$SECTOR_SIZE")
-  aoff=$(cat "$q/alignment_offset" 2>/dev/null || echo 0)
+  local d=${TARGET##*/} q pbs iomin aoff grain lcm
+  q=/sys/block/$d
+  if [[ -w $q/device/rescan ]]; then
+    echo 1 > "$q/device/rescan" 2>/dev/null || true
+    udevadm settle
+  fi
+  pbs=$(cat "$q/queue/physical_block_size" 2>/dev/null || blockdev --getpbsz "$TARGET")
+  iomin=$(cat "$q/queue/minimum_io_size" 2>/dev/null || blockdev --getiomin "$TARGET")
+  aoff=$(cat "$q/alignment_offset" 2>/dev/null || blockdev --getalignoff "$TARGET")
   TOPO_DESC="physical block ${pbs}B, minimum I/O ${iomin}B, alignment offset ${aoff}B"
 
   STEP_S=$ALIGN_SECTORS ALIGN_OFF_S=0 GRAIN_S=1
@@ -185,7 +194,7 @@ parse_args() {
       -p|--part)           EXTRA_SPECS+=("${2:?}"); shift ;;
       -w|--swap)           SWAP_SIZE=${2:?}; shift ;;
       -t|--table)          TABLE=${2:?}; shift ;;
-      -f|--first-sector)   FIRST_SECTOR=${2:?}; shift ;;
+      -f|--first-sector)   FIRST_SECTOR=${2:?}; FIRST_SECTOR_USER=1; shift ;;
       -a|--align)          ALIGN_SECTORS=${2:?}; shift ;;
       --no-topology)       USE_TOPOLOGY=0 ;;
       -s|--source)         SRC=${2:?}; shift ;;
@@ -356,7 +365,7 @@ plan_layout() {
   spm=$(( 1048576 / SECTOR_SIZE ))                            # sectors per MiB
   read_topology
 
-  [[ -n $FIRST_SECTOR ]] || FIRST_SECTOR=$(round_up $(( 4 * spm )))
+  (( FIRST_SECTOR_USER )) || FIRST_SECTOR=$(round_up $(( 4 * spm )))
   (( FIRST_SECTOR >= 34 )) || die "--first-sector must be at least 34 (room for the partition table)"
   if (( (FIRST_SECTOR - ALIGN_OFF_S) % STEP_S )); then
     warn "Partition 1 starts at unaligned sector $FIRST_SECTOR; it will be sized up so partition 2 is aligned."
@@ -476,6 +485,22 @@ partition_disk() {
   wipefs -a -q "$TARGET"
   dd if=/dev/zero of="$TARGET" bs="$SECTOR_SIZE" count="$FIRST_SECTOR" conv=fsync status=none
   parted -s "$TARGET" mklabel "$TABLE"
+  partprobe "$TARGET" || true
+  udevadm settle
+
+  # Some USB bridges change their reported topology once the partition table has
+  # been re-read. Re-plan if the partition starts would now be different.
+  local old_starts="${P_START[*]}" old_desc=$TOPO_DESC
+  plan_layout
+  if [[ ${P_START[*]} != "$old_starts" ]]; then
+    warn "$TARGET changed its reported topology after the partition table was rewritten"
+    warn "  was: $old_desc"
+    warn "  now: $TOPO_DESC"
+    warn "Re-planned partition starts (sizes unchanged):"
+    for i in "${!P_ROLE[@]}"; do
+      printf '     %-3s %-18s start %12s  end %12s  %s\n' "${P_NUM[i]}" "${P_DEV[i]}" "${P_START[i]}" "${P_END[i]}" "${P_MNT[i]}" >&2
+    done
+  fi
 
   # -a none: use our exact sector numbers; alignment was already worked out in plan_layout
   for i in "${!P_ROLE[@]}"; do
@@ -509,14 +534,22 @@ partition_disk() {
   done
   parted -s "$TARGET" unit s print
 
-  # Check what the kernel (and so mkfs) thinks of the new partitions
-  local off
+  # Check what the kernel (and so mkfs) thinks of the new partitions; stop before mkfs if misaligned
+  local off bad=0
   for i in "${!P_DEV[@]}"; do
     off=$(cat "/sys/class/block/${P_DEV[i]##*/}/alignment_offset" 2>/dev/null || echo 0)
     if (( off != 0 )); then
-      warn "${P_DEV[i]} alignment is offset by $off bytes ($TOPO_DESC)"
+      if (( i == 0 && FIRST_SECTOR_USER )); then
+        warn "${P_DEV[i]} alignment is offset by $off bytes (you chose --first-sector $FIRST_SECTOR)"
+      else
+        warn "${P_DEV[i]} alignment is offset by $off bytes"; bad=1
+      fi
     fi
   done
+  if (( bad )); then
+    read_topology >/dev/null 2>&1 || true
+    die "Partitions are misaligned for the kernel's current topology of $TARGET ($TOPO_DESC). Re-run the script; if it persists, the device keeps changing what it reports - use --no-topology."
+  fi
 }
 
 check_mkfs_tools() {
